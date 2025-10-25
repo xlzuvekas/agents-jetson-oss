@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # Letta Server - Core memory management service
+  letta-server:
+    image: letta/letta:latest
+    container_name: hetairos-letta-server
+    ports:
+      - "8283:8283"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - POSTGRES_URI=postgresql://letta:letta_password@postgres:5432/letta
+      - LETTA_SERVER_PASS=${LETTA_API_KEY:-}
+    volumes:
+      - letta-data:/root/.letta
+    depends_on:
+      - postgres
+      - chroma
+    restart: unless-stopped
+    networks:
+      - hetairos-network
+
+  # PostgreSQL - Letta state and recall memory
+  postgres:
+    image: postgres:16-alpine
+    container_name: hetairos-postgres
+    environment:
+      - POSTGRES_USER=letta
+      - POSTGRES_PASSWORD=letta_password
+      - POSTGRES_DB=letta
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - hetairos-network
+
+  # ChromaDB - Vector store for archival memory
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: hetairos-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    restart: unless-stopped
+    networks:
+      - hetairos-network
+
+  # MongoDB - Short-term conversation storage (existing hetairos)
+  mongodb:
+    image: mongo:7
+    container_name: hetairos-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=hetairos
+    restart: unless-stopped
+    networks:
+      - hetairos-network
+
+  # Redis - WebSocket messaging and caching
+  redis:
+    image: redis:7-alpine
+    container_name: hetairos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - hetairos-network
+
+  # Hetairos API (optional - if running hetairos in Docker)
+  # hetairos-api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: hetairos-api
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - MEMORY_BACKEND=letta
+  #     - LETTA_SERVER_URL=http://letta-server:8283
+  #     - MONGODB_URI=mongodb://mongodb:27017
+  #     - REDIS_URL=redis://redis:6379
+  #     - POSTGRES_HOST=postgres
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - letta-server
+  #     - mongodb
+  #     - redis
+  #   restart: unless-stopped
+  #   networks:
+  #     - hetairos-network
+
+volumes:
+  letta-data:
+    driver: local
+  postgres-data:
+    driver: local
+  chroma-data:
+    driver: local
+  mongodb-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  hetairos-network:
+    driver: bridge
